@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シューティングゲーム</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+        }
+        
+        #gameContainer {
+            position: relative;
+            background: linear-gradient(to bottom, #000428, #004e92);
+        }
+        
+        #gameCanvas {
+            border: 2px solid #fff;
+            background: transparent;
+        }
+        
+        #gameInfo {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            font-size: 20px;
+            z-index: 10;
+        }
+        
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            text-align: center;
+            font-size: 24px;
+            z-index: 20;
+            display: none;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            text-align: center;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="gameInfo">
+            <div>スコア: <span id="score">0</span></div>
+            <div>ライフ: <span id="lives">3</span></div>
+        </div>
+        <div id="gameOver">
+            <h2>ゲームオーバー</h2>
+            <p>最終スコア: <span id="finalScore">0</span></p>
+            <p>スペースキーでリスタート</p>
+        </div>
+        <div id="instructions">
+            矢印キー: 移動 | スペース: 射撃 | ESC: ポーズ
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const enemyImages = [
+            new Image(),
+            new Image(),
+            new Image()
+        ];
+        
+        enemyImages[0].src = 'images/monster01.png';
+        enemyImages[1].src = 'images/monster02.png';
+        enemyImages[2].src = 'images/monster03.png';
+        
+        let imagesLoaded = 0;
+        const totalImages = enemyImages.length;
+        
+        enemyImages.forEach((img, index) => {
+            img.onload = () => {
+                imagesLoaded++;
+                if (imagesLoaded === totalImages) {
+                    console.log('All enemy images loaded');
+                }
+            };
+        });
+        
+        const gameState = {
+            score: 0,
+            lives: 3,
+            isGameOver: false,
+            isPaused: false,
+            keys: {},
+            player: {
+                x: canvas.width / 2 - 25,
+                y: canvas.height - 60,
+                width: 50,
+                height: 40,
+                speed: 5
+            },
+            bullets: [],
+            enemies: [],
+            enemyBullets: [],
+            lastEnemySpawn: 0,
+            enemySpawnRate: 2000
+        };
+        
+        function drawPlayer() {
+            ctx.fillStyle = '#00ff00';
+            ctx.fillRect(gameState.player.x, gameState.player.y, gameState.player.width, gameState.player.height);
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(gameState.player.x + 20, gameState.player.y - 5, 10, 15);
+        }
+        
+        function drawBullets() {
+            ctx.fillStyle = '#ffff00';
+            gameState.bullets.forEach(bullet => {
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+            
+            ctx.fillStyle = '#ff0000';
+            gameState.enemyBullets.forEach(bullet => {
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+        }
+        
+        function drawEnemies() {
+            gameState.enemies.forEach(enemy => {
+                if (enemy.imageIndex !== undefined && enemyImages[enemy.imageIndex].complete) {
+                    ctx.drawImage(enemyImages[enemy.imageIndex], enemy.x, enemy.y, enemy.width, enemy.height);
+                } else {
+                    ctx.fillStyle = '#ff0000';
+                    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                }
+            });
+        }
+        
+        function updatePlayer() {
+            if (gameState.keys['ArrowLeft'] && gameState.player.x > 0) {
+                gameState.player.x -= gameState.player.speed;
+            }
+            if (gameState.keys['ArrowRight'] && gameState.player.x < canvas.width - gameState.player.width) {
+                gameState.player.x += gameState.player.speed;
+            }
+            if (gameState.keys['ArrowUp'] && gameState.player.y > 0) {
+                gameState.player.y -= gameState.player.speed;
+            }
+            if (gameState.keys['ArrowDown'] && gameState.player.y < canvas.height - gameState.player.height) {
+                gameState.player.y += gameState.player.speed;
+            }
+        }
+        
+        function updateBullets() {
+            gameState.bullets = gameState.bullets.filter(bullet => {
+                bullet.y -= bullet.speed;
+                return bullet.y > -bullet.height;
+            });
+            
+            gameState.enemyBullets = gameState.enemyBullets.filter(bullet => {
+                bullet.y += bullet.speed;
+                return bullet.y < canvas.height;
+            });
+        }
+        
+        function updateEnemies() {
+            const now = Date.now();
+            if (now - gameState.lastEnemySpawn > gameState.enemySpawnRate) {
+                const imageIndex = Math.floor(Math.random() * enemyImages.length);
+                gameState.enemies.push({
+                    x: Math.random() * (canvas.width - 40),
+                    y: -40,
+                    width: 40,
+                    height: 30,
+                    speed: 2 + Math.random() * 2,
+                    lastShot: now,
+                    imageIndex: imageIndex
+                });
+                gameState.lastEnemySpawn = now;
+            }
+            
+            gameState.enemies = gameState.enemies.filter(enemy => {
+                enemy.y += enemy.speed;
+                
+                if (Math.random() < 0.02 && now - enemy.lastShot > 1000) {
+                    gameState.enemyBullets.push({
+                        x: enemy.x + enemy.width / 2 - 2,
+                        y: enemy.y + enemy.height,
+                        width: 4,
+                        height: 10,
+                        speed: 3
+                    });
+                    enemy.lastShot = now;
+                }
+                
+                return enemy.y < canvas.height;
+            });
+        }
+        
+        function checkCollisions() {
+            gameState.bullets.forEach((bullet, bulletIndex) => {
+                gameState.enemies.forEach((enemy, enemyIndex) => {
+                    if (bullet.x < enemy.x + enemy.width &&
+                        bullet.x + bullet.width > enemy.x &&
+                        bullet.y < enemy.y + enemy.height &&
+                        bullet.y + bullet.height > enemy.y) {
+                        
+                        gameState.bullets.splice(bulletIndex, 1);
+                        gameState.enemies.splice(enemyIndex, 1);
+                        gameState.score += 10;
+                        updateScore();
+                    }
+                });
+            });
+            
+            gameState.enemies.forEach((enemy, enemyIndex) => {
+                if (gameState.player.x < enemy.x + enemy.width &&
+                    gameState.player.x + gameState.player.width > enemy.x &&
+                    gameState.player.y < enemy.y + enemy.height &&
+                    gameState.player.y + gameState.player.height > enemy.y) {
+                    
+                    gameState.enemies.splice(enemyIndex, 1);
+                    gameState.lives--;
+                    updateLives();
+                    
+                    if (gameState.lives <= 0) {
+                        gameOver();
+                    }
+                }
+            });
+            
+            gameState.enemyBullets.forEach((bullet, bulletIndex) => {
+                if (gameState.player.x < bullet.x + bullet.width &&
+                    gameState.player.x + gameState.player.width > bullet.x &&
+                    gameState.player.y < bullet.y + bullet.height &&
+                    gameState.player.y + gameState.player.height > bullet.y) {
+                    
+                    gameState.enemyBullets.splice(bulletIndex, 1);
+                    gameState.lives--;
+                    updateLives();
+                    
+                    if (gameState.lives <= 0) {
+                        gameOver();
+                    }
+                }
+            });
+        }
+        
+        function updateScore() {
+            document.getElementById('score').textContent = gameState.score;
+        }
+        
+        function updateLives() {
+            document.getElementById('lives').textContent = gameState.lives;
+        }
+        
+        function gameOver() {
+            gameState.isGameOver = true;
+            document.getElementById('finalScore').textContent = gameState.score;
+            document.getElementById('gameOver').style.display = 'block';
+        }
+        
+        function resetGame() {
+            gameState.score = 0;
+            gameState.lives = 3;
+            gameState.isGameOver = false;
+            gameState.isPaused = false;
+            gameState.player.x = canvas.width / 2 - 25;
+            gameState.player.y = canvas.height - 60;
+            gameState.bullets = [];
+            gameState.enemies = [];
+            gameState.enemyBullets = [];
+            gameState.lastEnemySpawn = 0;
+            
+            updateScore();
+            updateLives();
+            document.getElementById('gameOver').style.display = 'none';
+        }
+        
+        function gameLoop() {
+            if (!gameState.isGameOver && !gameState.isPaused) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                updatePlayer();
+                updateBullets();
+                updateEnemies();
+                checkCollisions();
+                
+                drawPlayer();
+                drawBullets();
+                drawEnemies();
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        document.addEventListener('keydown', (e) => {
+            gameState.keys[e.code] = true;
+            
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (gameState.isGameOver) {
+                    resetGame();
+                } else if (!gameState.isPaused) {
+                    gameState.bullets.push({
+                        x: gameState.player.x + gameState.player.width / 2 - 2,
+                        y: gameState.player.y - 10,
+                        width: 4,
+                        height: 10,
+                        speed: 7
+                    });
+                }
+            }
+            
+            if (e.code === 'Escape') {
+                gameState.isPaused = !gameState.isPaused;
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            gameState.keys[e.code] = false;
+        });
+        
+        gameLoop();
+    </script>
+</body>
+</html>
