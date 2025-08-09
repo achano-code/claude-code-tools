@@ -1,0 +1,11 @@
+services:
+  claude_code:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    tty: true
+    volumes:
+      - type: bind
+        source: ./src
+        target: /src
