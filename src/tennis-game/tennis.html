@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>クラシックテニスゲーム</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+
+        #gameContainer {
+            text-align: center;
+            color: white;
+        }
+
+        #gameCanvas {
+            border: 2px solid white;
+            background-color: #006400;
+        }
+
+        #score {
+            margin: 20px 0;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        #instructions {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #ccc;
+        }
+
+        #startButton {
+            margin: 20px 0;
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #fff;
+            color: #000;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        #startButton:hover {
+            background-color: #eee;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <h1>クラシックテニスゲーム</h1>
+        <div id="score">プレイヤー: 0 | コンピューター: 0</div>
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <button id="startButton">ゲーム開始</button>
+        <div id="instructions">
+            操作方法: マウスで左のパドルを上下に動かします<br>
+            ボールを相手のエンドまで通せば得点です
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const startButton = document.getElementById('startButton');
+
+        let gameRunning = false;
+        let playerScore = 0;
+        let computerScore = 0;
+
+        const paddle = {
+            width: 10,
+            height: 80,
+            player: { x: 10, y: canvas.height / 2 - 40, speed: 6 },
+            computer: { x: canvas.width - 20, y: canvas.height / 2 - 40, speed: 4 }
+        };
+
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 8,
+            speedX: 5,
+            speedY: 3
+        };
+
+        function resetBall() {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            ball.speedX = Math.random() > 0.5 ? 5 : -5;
+            ball.speedY = (Math.random() - 0.5) * 6;
+        }
+
+        function drawPaddle(x, y) {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(x, y, paddle.width, paddle.height);
+        }
+
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawNet() {
+            ctx.setLineDash([10, 10]);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        function updateBall() {
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+
+            if (ball.y <= ball.radius || ball.y >= canvas.height - ball.radius) {
+                ball.speedY = -ball.speedY;
+            }
+
+            if (ball.x - ball.radius <= paddle.player.x + paddle.width &&
+                ball.y >= paddle.player.y &&
+                ball.y <= paddle.player.y + paddle.height &&
+                ball.speedX < 0) {
+                ball.speedX = -ball.speedX;
+                let hitPoint = (ball.y - (paddle.player.y + paddle.height / 2)) / (paddle.height / 2);
+                ball.speedY = hitPoint * 5;
+            }
+
+            if (ball.x + ball.radius >= paddle.computer.x &&
+                ball.y >= paddle.computer.y &&
+                ball.y <= paddle.computer.y + paddle.height &&
+                ball.speedX > 0) {
+                ball.speedX = -ball.speedX;
+                let hitPoint = (ball.y - (paddle.computer.y + paddle.height / 2)) / (paddle.height / 2);
+                ball.speedY = hitPoint * 5;
+            }
+
+            if (ball.x < 0) {
+                computerScore++;
+                resetBall();
+                updateScore();
+            }
+
+            if (ball.x > canvas.width) {
+                playerScore++;
+                resetBall();
+                updateScore();
+            }
+        }
+
+        function updateComputerPaddle() {
+            const paddleCenter = paddle.computer.y + paddle.height / 2;
+            const ballCenter = ball.y;
+
+            if (paddleCenter < ballCenter - 35) {
+                paddle.computer.y += paddle.computer.speed;
+            } else if (paddleCenter > ballCenter + 35) {
+                paddle.computer.y -= paddle.computer.speed;
+            }
+
+            if (paddle.computer.y < 0) {
+                paddle.computer.y = 0;
+            }
+            if (paddle.computer.y > canvas.height - paddle.height) {
+                paddle.computer.y = canvas.height - paddle.height;
+            }
+        }
+
+        function updateScore() {
+            scoreElement.textContent = `プレイヤー: ${playerScore} | コンピューター: ${computerScore}`;
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawNet();
+            drawPaddle(paddle.player.x, paddle.player.y);
+            drawPaddle(paddle.computer.x, paddle.computer.y);
+            drawBall();
+
+            updateBall();
+            updateComputerPaddle();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!gameRunning) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const mouseY = e.clientY - rect.top;
+            paddle.player.y = mouseY - paddle.height / 2;
+
+            if (paddle.player.y < 0) {
+                paddle.player.y = 0;
+            }
+            if (paddle.player.y > canvas.height - paddle.height) {
+                paddle.player.y = canvas.height - paddle.height;
+            }
+        });
+
+        startButton.addEventListener('click', () => {
+            if (!gameRunning) {
+                gameRunning = true;
+                startButton.textContent = 'ゲーム停止';
+                resetBall();
+                gameLoop();
+            } else {
+                gameRunning = false;
+                startButton.textContent = 'ゲーム開始';
+            }
+        });
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawNet();
+        drawPaddle(paddle.player.x, paddle.player.y);
+        drawPaddle(paddle.computer.x, paddle.computer.y);
+        drawBall();
+    </script>
+</body>
+</html>
